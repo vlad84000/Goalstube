@@ -4,7 +4,7 @@
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vlad84000/Goalstube/main/thumbs';
 const BLOG_URL   = 'https://www.goalstube.online';
 
-// Label (lowercase, no spaces) → folder in thumbs/
+// Label → folder (case-insensitive matching handled below)
 const LABEL_MAP = {
   'epl':        'epl',
   'ucl':        'ucl',
@@ -15,14 +15,13 @@ const LABEL_MAP = {
   'uel':        'uel',
 };
 
-// Post title is used DIRECTLY as filename — no conversion
-// "Arsenal - Manchester City" → "Arsenal - Manchester City.jpg"
 function titleToFilename(title) {
   return title.trim() + '.jpg';
 }
 
 function getCompFolder(labels) {
   for (const lbl of labels) {
+    // normalize: lowercase + remove spaces
     const key = lbl.toLowerCase().replace(/\s+/g, '');
     if (LABEL_MAP[key]) return LABEL_MAP[key];
   }
@@ -32,23 +31,39 @@ function getCompFolder(labels) {
 function applyThumb(postUrl, imgUrl, title) {
   const normalizedUrl = postUrl.replace(/^http:/, 'https:');
 
-  // Target your theme's exact thumbnail class: imgThm
-  const thumbImgs = document.querySelectorAll('img.imgThm');
+  // Find all post card containers
+  const cards = document.querySelectorAll('article, .post-outer, .post, [class*="post-item"], [class*="item-post"]');
 
-  thumbImgs.forEach(img => {
-    const card = img.closest('article, .post-outer, .post, [class*="post-item"], [class*="item-post"], section, li');
-    if (!card) return;
-
+  cards.forEach(card => {
+    // Check if this card belongs to our post
     const links = card.querySelectorAll('a[href]');
     const isMatch = [...links].some(a =>
-      a.href === postUrl || a.href === normalizedUrl
+      a.href === postUrl ||
+      a.href === normalizedUrl ||
+      a.href.replace(/^http:/, 'https:') === normalizedUrl
     );
     if (!isMatch) return;
 
-    // Update both src and data-src (theme uses lazy loading)
-    img.src = imgUrl;
-    img.setAttribute('data-src', imgUrl);
-    img.alt = title;
+    // Try to find existing imgThm thumbnail
+    let img = card.querySelector('img.imgThm');
+
+    if (img) {
+      // Replace existing thumbnail
+      img.src = imgUrl;
+      img.setAttribute('data-src', imgUrl);
+      img.alt = title;
+    } else {
+      // No thumbnail exists — create and inject one
+      img = document.createElement('img');
+      img.alt   = title;
+      img.src   = imgUrl;
+      img.setAttribute('data-src', imgUrl);
+      img.className = 'imgThm';
+      img.style.cssText = 'width:100%;display:block;aspect-ratio:16/9;object-fit:cover;';
+
+      // Insert at the top of the card
+      card.insertBefore(img, card.firstChild);
+    }
 
     // Fallback: .jpg → .webp → .png
     img.onerror = () => {
@@ -62,6 +77,33 @@ function applyThumb(postUrl, imgUrl, title) {
         img.setAttribute('data-src', png);
       }
     };
+  });
+
+  // Also handle single post page (isPost = true, no card wrapper)
+  // Look for the post title h1/h2/h3 and inject above it
+  const postTitles = document.querySelectorAll('h1.post-title, h2.post-title, .entry-title, [class*="post-title"]');
+  postTitles.forEach(titleEl => {
+    const pageTitle = titleEl.textContent.trim();
+    if (pageTitle !== title) return;
+    if (titleEl.previousElementSibling && titleEl.previousElementSibling.classList.contains('gt-match-thumb')) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'gt-match-thumb';
+    wrapper.style.cssText = 'width:100%;margin-bottom:16px;';
+
+    const img = document.createElement('img');
+    img.src   = imgUrl;
+    img.setAttribute('data-src', imgUrl);
+    img.alt   = title;
+    img.style.cssText = 'width:100%;display:block;aspect-ratio:16/9;object-fit:cover;border-radius:8px;';
+
+    img.onerror = () => {
+      if (img.src.endsWith('.jpg')) img.src = imgUrl.replace('.jpg', '.webp');
+      else if (img.src.endsWith('.webp')) img.src = imgUrl.replace('.webp', '.png');
+    };
+
+    wrapper.appendChild(img);
+    titleEl.parentNode.insertBefore(wrapper, titleEl);
   });
 }
 
@@ -78,13 +120,11 @@ async function loadGameThumbs() {
       if (!linkObj) return;
 
       const folder = getCompFolder(labels);
-      if (!folder) return; // skip posts without a competition label
+      if (!folder) return;
 
       const postUrl  = linkObj.href;
       const filename = titleToFilename(title);
-
-      // URL-encode the filename to handle spaces and special chars
-      const imgUrl = `${GITHUB_RAW}/${folder}/${encodeURIComponent(filename)}`;
+      const imgUrl   = `${GITHUB_RAW}/${folder}/${encodeURIComponent(filename)}`;
 
       applyThumb(postUrl, imgUrl, title);
     });
