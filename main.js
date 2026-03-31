@@ -26,29 +26,13 @@ function getCompFolder(labels) {
   return null;
 }
 
-function makeImg(imgUrl, title) {
-  const img = document.createElement('img');
-  img.src = imgUrl;
-  img.setAttribute('data-src', imgUrl);
-  img.alt = title;
-  img.style.cssText = 'width:100%;display:block;aspect-ratio:16/9;object-fit:cover;';
-  img.onerror = () => {
-    if (img.src.endsWith('.jpg')) img.src = imgUrl.replace('.jpg', '.webp');
-    else if (img.src.endsWith('.webp')) img.src = imgUrl.replace('.webp', '.png');
-  };
-  return img;
-}
-
 function applyThumb(postUrl, imgUrl, title) {
   const normalizedUrl = postUrl.replace(/^http:/, 'https:');
 
-  // Find all .imgThm elements — could be <span> (placeholder) or <img>
-  document.querySelectorAll('.imgThm').forEach(el => {
-    // Walk up to the post card
-    const card = el.closest('article, .post-outer, .post, [class*="post-item"], li');
-    if (!card) return;
+  // Exact card selector from DOM: article.ntry
+  document.querySelectorAll('article.ntry').forEach(card => {
 
-    // Check this card links to our post
+    // Match this card to the post by its link
     const isMatch = [...card.querySelectorAll('a[href]')].some(a =>
       a.href === postUrl ||
       a.href === normalizedUrl ||
@@ -56,17 +40,38 @@ function applyThumb(postUrl, imgUrl, title) {
     );
     if (!isMatch) return;
 
-    if (el.tagName === 'SPAN') {
-      // Replace the placeholder span with a real img
-      const img = makeImg(imgUrl, title);
-      img.className = 'imgThm';
-      el.replaceWith(img);
-    } else if (el.tagName === 'IMG') {
-      // Just update the existing img
-      el.src = imgUrl;
-      el.setAttribute('data-src', imgUrl);
-      el.alt = title;
+    // Find the thumbnail container div.thmb
+    const thmb = card.querySelector('div.thmb');
+    if (!thmb) return;
+
+    // Find the span placeholder or existing img
+    const span = thmb.querySelector('span.imgThm');
+    const existingImg = thmb.querySelector('img.imgThm');
+
+    if (span) {
+      // Replace span with real img
+      const img = document.createElement('img');
+      img.src = imgUrl;
+      img.setAttribute('data-src', imgUrl);
+      img.alt = title;
+      img.className = 'imgThm show-if-js lblr lazyloaded';
+      img.style.cssText = 'width:100%;display:block;aspect-ratio:16/9;object-fit:cover;';
+      img.onerror = () => {
+        if (img.src.endsWith('.jpg')) img.src = imgUrl.replace('.jpg', '.webp');
+        else if (img.src.endsWith('.webp')) img.src = imgUrl.replace('.webp', '.png');
+      };
+      span.replaceWith(img);
+    } else if (existingImg) {
+      // Update existing img
+      existingImg.src = imgUrl;
+      existingImg.setAttribute('data-src', imgUrl);
+      existingImg.alt = title;
     }
+
+    // Remove "no thumbnail" classes so theme renders it correctly
+    card.classList.remove('noThmb');
+    const pThmb = card.querySelector('div.pThmb');
+    if (pThmb) pThmb.classList.remove('nul');
   });
 }
 
