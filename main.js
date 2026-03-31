@@ -4,6 +4,7 @@
 const GITHUB_RAW = 'https://raw.githubusercontent.com/vlad84000/Goalstube/main/thumbs';
 const BLOG_URL   = 'https://www.goalstube.online';
 
+// Label (lowercase, no spaces) → folder in thumbs/
 const LABEL_MAP = {
   'epl':        'epl',
   'ucl':        'ucl',
@@ -14,15 +15,10 @@ const LABEL_MAP = {
   'uel':        'uel',
 };
 
+// Post title is used DIRECTLY as filename — no conversion
+// "Arsenal - Manchester City" → "Arsenal - Manchester City.jpg"
 function titleToFilename(title) {
-  return title
-    .toLowerCase()
-    .trim()
-    .replace(/\s*-\s*/g, '-vs-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    + '.jpg';
+  return title.trim() + '.jpg';
 }
 
 function getCompFolder(labels) {
@@ -40,30 +36,30 @@ function applyThumb(postUrl, imgUrl, title) {
   const thumbImgs = document.querySelectorAll('img.imgThm');
 
   thumbImgs.forEach(img => {
-    // Walk up to the post card container
     const card = img.closest('article, .post-outer, .post, [class*="post-item"], [class*="item-post"], section, li');
     if (!card) return;
 
-    // Check if this card contains a link to our post
     const links = card.querySelectorAll('a[href]');
     const isMatch = [...links].some(a =>
       a.href === postUrl || a.href === normalizedUrl
     );
     if (!isMatch) return;
 
-    // Set both src and data-src (your theme uses lazy loading)
+    // Update both src and data-src (theme uses lazy loading)
     img.src = imgUrl;
     img.setAttribute('data-src', imgUrl);
     img.alt = title;
 
-    // Fallback: try .webp then .png if .jpg not found
+    // Fallback: .jpg → .webp → .png
     img.onerror = () => {
       if (img.src.endsWith('.jpg')) {
-        img.src = imgUrl.replace('.jpg', '.webp');
-        img.setAttribute('data-src', img.src);
+        const webp = imgUrl.replace('.jpg', '.webp');
+        img.src = webp;
+        img.setAttribute('data-src', webp);
       } else if (img.src.endsWith('.webp')) {
-        img.src = imgUrl.replace('.webp', '.png');
-        img.setAttribute('data-src', img.src);
+        const png = imgUrl.replace('.webp', '.png');
+        img.src = png;
+        img.setAttribute('data-src', png);
       }
     };
   });
@@ -86,7 +82,9 @@ async function loadGameThumbs() {
 
       const postUrl  = linkObj.href;
       const filename = titleToFilename(title);
-      const imgUrl   = `${GITHUB_RAW}/${folder}/${filename}`;
+
+      // URL-encode the filename to handle spaces and special chars
+      const imgUrl = `${GITHUB_RAW}/${folder}/${encodeURIComponent(filename)}`;
 
       applyThumb(postUrl, imgUrl, title);
     });
